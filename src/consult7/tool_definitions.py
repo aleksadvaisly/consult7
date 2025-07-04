@@ -11,26 +11,29 @@ class ToolDescriptions:
             '"google/gemini-2.5-flash-lite-preview-06-17" (ultra fast, 1M context)',
             '"anthropic/claude-sonnet-4" (Claude Sonnet, 200k context)',
             '"openai/gpt-4.1" (GPT-4.1, 1M+ context)',
-            '"anthropic/claude-sonnet-4|thinking" (Claude with 31,999 tokens)',
-            '"google/gemini-2.5-flash-lite-preview-06-17|thinking" (ultra fast with reasoning)',
-            '"openai/gpt-4.1|thinking" (GPT-4.1 with reasoning effort=high)',
+            '"anthropic/claude-sonnet-4?thinking=true" (Claude with reasoning)',
+            '"anthropic/claude-sonnet-4?thinking=true&budget=30000" (Claude with custom budget)',
+            '"google/gemini-2.5-flash?thinking=true" (ultra fast with reasoning)',
+            '"anthropic/claude-sonnet-4|thinking" (legacy format)',
         ],
         "google": [
             '"gemini-2.5-flash" (fast, standard mode)',
             '"gemini-2.5-flash-lite-preview-06-17" (ultra fast, lite model)',
             '"gemini-2.5-pro" (intelligent, standard mode)',
             '"gemini-2.0-flash-exp" (experimental model)',
-            '"gemini-2.5-flash|thinking" (fast with deep reasoning)',
-            '"gemini-2.5-flash-lite-preview-06-17|thinking" (ultra fast with deep reasoning)',
-            '"gemini-2.5-pro|thinking" (intelligent with deep reasoning)',
+            '"gemini-2.5-flash?thinking=true" (fast with deep reasoning)',
+            '"gemini-2.5-flash?thinking=true&budget=15000" (fast with custom budget)',
+            '"gemini-2.5-pro?thinking=true" (intelligent with deep reasoning)',
+            '"gemini-2.5-flash|thinking" (legacy format)',
         ],
         "openai": [
-            '"gpt-4.1-2025-04-14|1047576" (1M+ context, very fast)',
-            '"gpt-4.1-nano-2025-04-14|1047576" (1M+ context, ultra fast)',
-            '"o3-2025-04-16|200k" (advanced reasoning model)',
-            '"o4-mini-2025-04-16|200k" (fast reasoning model)',
-            '"o1-mini|128k|thinking" (mini reasoning with |thinking marker)',
-            '"o3-2025-04-16|200k|thinking" (advanced reasoning with |thinking marker)',
+            '"gpt-4.1-2025-04-14?context=1000k" (1M+ context, very fast)',
+            '"gpt-4.1-nano-2025-04-14?context=1000k" (1M+ context, ultra fast)',
+            '"o3-2025-04-16?context=200k" (advanced reasoning model)',
+            '"o4-mini-2025-04-16?context=200k" (fast reasoning model)',
+            '"o1-mini?context=128k&thinking=true" (mini reasoning with thinking)',
+            '"o3-2025-04-16?context=200k&thinking=true" (advanced with thinking)',
+            '"gpt-4.1-2025-04-14|1047576" (legacy format)',
         ],
     }
 
@@ -60,23 +63,23 @@ Notes:
 
         if provider == "openai":
             model_desc = (
-                "The model to use. Include context length with | "
-                'separator (e.g., "model-name|200k").\nExamples:'
+                "The model to use. New format: model?context=200k&thinking=true or "
+                'legacy format: model|200k|thinking.\nExamples:'
             )
         else:
-            model_desc = "The model to use. Examples:"
+            model_desc = "The model to use. New format: model?thinking=true&budget=15000 or legacy: model|thinking. Examples:"
 
-        # Add examples on new lines, but check where to add |thinking note
+        # Add examples on new lines, but check where to add thinking note
         thinking_examples_start = -1
         for i, example in enumerate(examples):
-            if "|thinking" in example and thinking_examples_start == -1:
+            if ("?thinking=true" in example or "|thinking" in example) and thinking_examples_start == -1:
                 thinking_examples_start = i
-                # Add the |thinking note before the first thinking example
+                # Add the thinking note before the first thinking example
                 if provider in ["google", "openrouter"]:
                     suffix_type = "thinking" if provider == "google" else "reasoning"
-                    model_desc += f"\n\nAdd |thinking suffix for {suffix_type} mode:"
+                    model_desc += f"\n\nWith {suffix_type} mode:"
                 elif provider == "openai":
-                    model_desc += "\n\n|thinking suffix (o-series models only):"
+                    model_desc += "\n\nWith thinking mode (o-series models):"
             model_desc += f"\n  {example}"
 
         return model_desc
@@ -111,13 +114,17 @@ Notes:
             return ""  # Move note to model parameter description
         elif provider == "google":
             return (
-                "Thinking Mode: Add |thinking to any model for deep reasoning (e.g., gemini-2.5-flash|thinking).\n"
-                "Advanced: For custom thinking limits, use |thinking=30000"
+                "Thinking Mode: Use ?thinking=true for deep reasoning (e.g., gemini-2.5-flash?thinking=true).\n"
+                "Advanced: For custom thinking limits, use ?thinking=true&budget=30000\n"
+                "Legacy: |thinking format still supported\n"
+                "Important: Always quote models with ? or & in environment variables"
             )
         elif provider == "openrouter":
             return (
-                "Reasoning Mode: Add |thinking suffix to enable deeper analysis.\n"
-                "Advanced: For custom limits, use |thinking=30000"
+                "Reasoning Mode: Use ?thinking=true to enable deeper analysis.\n"
+                "Advanced: For custom limits, use ?thinking=true&budget=30000\n"
+                "Legacy: |thinking format still supported\n"
+                "Important: Always quote models with ? or & in environment variables"
             )
         else:
             return "Note: Model context windows are auto-detected from the API"

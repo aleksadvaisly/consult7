@@ -21,7 +21,7 @@ from ..constants import (
 from ..token_utils import (
     TOKEN_SAFETY_FACTOR,
     estimate_tokens,
-    parse_model_thinking,
+    parse_model_spec,
     get_thinking_budget,
 )
 
@@ -93,9 +93,11 @@ class OpenRouterProvider(BaseProvider):
         if not api_key:
             return "", "No API key provided. Use --api-key flag", None
 
-        # Parse model and thinking override
-        actual_model, custom_thinking = parse_model_thinking(model_name)
-        reasoning_mode = custom_thinking is not None or model_name.endswith("|thinking")
+        # Parse model specification (new approach)
+        actual_model, model_params = parse_model_spec(model_name)
+        reasoning_mode = model_params.get('thinking', False)
+        custom_thinking = model_params.get('budget')
+        temperature = model_params.get('temperature', DEFAULT_TEMPERATURE)
 
         # Get model context info
         try:
@@ -225,7 +227,7 @@ class OpenRouterProvider(BaseProvider):
         data = {
             "model": actual_model,
             "messages": messages,
-            "temperature": DEFAULT_TEMPERATURE,
+            "temperature": temperature,
             "max_tokens": max_output_tokens,
         }
 

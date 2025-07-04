@@ -1,5 +1,7 @@
 """Constants and static configuration for Consult7 MCP server."""
 
+import os
+
 # File size limits
 MAX_FILE_SIZE = 10_000_000  # 10MB per file (increased for large context models)
 MAX_TOTAL_SIZE = 100_000_000  # 100MB total (increased for large context models)
@@ -21,7 +23,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 # API constants
-DEFAULT_TEMPERATURE = 0.7  # Default temperature for all providers
+DEFAULT_TEMPERATURE = float(os.environ.get("CONSULT7_DEFAULT_TEMPERATURE", "0.7"))  # Default temperature for all providers
 OPENROUTER_TIMEOUT = 30.0  # Timeout for OpenRouter API calls
 API_FETCH_TIMEOUT = 10.0  # Timeout for fetching model info
 DEFAULT_CONTEXT_LENGTH = 128_000  # Default context when not available from API

@@ -69,6 +69,8 @@ async def test_api_connection(server: Consult7Server):
 
 async def main():
     """Parse command line arguments and run the server."""
+    import os
+
     # Simple argument parsing
     args = sys.argv[1:]
     test_mode = False
@@ -78,34 +80,55 @@ async def main():
         test_mode = True
         args = args[:-1]  # Remove --test from args
 
-    # Validate arguments
-    if len(args) < MIN_ARGS:
-        print("Error: Missing required arguments")
-        print("Usage: consult7 <provider> <api-key> [--test]")
-        print()
-        print("Providers: openrouter, google, openai")
-        print()
-        print("Examples:")
-        print("  consult7 openrouter sk-or-v1-...")
-        print("  consult7 google AIza...")
-        print("  consult7 openai sk-proj-...")
-        print("  consult7 openrouter sk-or-v1-... --test")
+    # Try to get configuration from environment variables first
+    provider = os.environ.get("CONSULT7_PROVIDER")
+    
+    # Auto-detect provider from available API keys if not explicitly set
+    if not provider:
+        if os.environ.get("CONSULT7_GEMINI_API_KEY"):
+            provider = "google"
+        elif os.environ.get("CONSULT7_OPENAI_API_KEY"):
+            provider = "openai"
+        elif os.environ.get("CONSULT7_OPENROUTER_API_KEY"):
+            provider = "openrouter"
+        else:
+            provider = "google"  # Default fallback
+    
+    # Get API key based on provider
+    if provider == "google":
+        api_key = os.environ.get("CONSULT7_GEMINI_API_KEY")
+    elif provider == "openai":
+        api_key = os.environ.get("CONSULT7_OPENAI_API_KEY")
+    elif provider == "openrouter":
+        api_key = os.environ.get("CONSULT7_OPENROUTER_API_KEY")
+    else:
+        api_key = None
+
+    # Override with command line arguments if provided
+    if len(args) >= MIN_ARGS:
+        provider = args[0]
+        api_key = args[1]
+    elif len(args) == 1:
+        # Only provider specified
+        provider = args[0]
+
+    # Validate we have both provider and API key
+    if not provider:
+        logger.error("No provider specified via arguments or CONSULT7_PROVIDER environment variable")
         sys.exit(EXIT_FAILURE)
 
-    if len(args) > MIN_ARGS:
-        print(f"Error: Too many arguments. Expected {MIN_ARGS}, got {len(args)}")
-        print("Usage: consult7 <provider> <api-key> [--test]")
+    if not api_key:
+        logger.error("No API key found. Provide via argument or environment variable:")
+        logger.error("  CONSULT7_GEMINI_API_KEY for Google AI")
+        logger.error("  CONSULT7_OPENAI_API_KEY for OpenAI")
+        logger.error("  CONSULT7_OPENROUTER_API_KEY for OpenRouter")
         sys.exit(EXIT_FAILURE)
-
-    # Parse provider and api key
-    provider = args[0]
-    api_key = args[1]
 
     # Validate provider
     if provider not in ["openrouter", "google", "openai"]:
-        print(f"Error: Invalid provider '{provider}'")
-        print("Valid providers: openrouter, google, openai")
-        sys.exit(1)
+        logger.error(f"Invalid provider '{provider}'")
+        logger.error("Valid providers: openrouter, google, openai")
+        sys.exit(EXIT_FAILURE)
 
     # Create server with stored configuration
     server = Consult7Server("consult7", api_key, provider)
@@ -145,7 +168,7 @@ async def main():
                             "description": ToolDescriptions.get_exclude_pattern_description(),
                         },
                     },
-                    "required": ["path", "pattern", "query", "model"],
+                    "required": ["path", "pattern", "query"],
                 },
             )
         ]
@@ -155,11 +178,17 @@ async def main():
         """Handle tool calls."""
         try:
             if name == "consultation":
+                # Get model from arguments or environment variable
+                import os
+                model = arguments.get("model") or os.environ.get("CONSULT7_MODEL")
+                if not model:
+                    return [types.TextContent(type="text", text="Error: No model specified. Provide 'model' parameter or set CONSULT7_MODEL environment variable.")]
+
                 result = await consultation_impl(
                     arguments["path"],
                     arguments["pattern"],
                     arguments["query"],
-                    arguments["model"],
+                    model,
                     arguments.get("exclude_pattern"),
                     server.provider,
                     server.api_key,
@@ -196,18 +225,19 @@ async def main():
 
             return [types.TextContent(type="text", text=f"Error: {error_msg}")]
 
-    # Show model examples for the provider
-    logger.info("Starting Consult7 MCP Server")
-    logger.info(f"Provider: {server.provider}")
-    logger.info("API Key: Set")
+    # Only log in test mode to avoid polluting stdio
+    if test_mode:
+        logger.info("Starting Consult7 MCP Server")
+        logger.info(f"Provider: {server.provider}")
+        logger.info("API Key: Set")
 
-    examples = ToolDescriptions.MODEL_EXAMPLES.get(server.provider, [])
-    if examples:
-        logger.info(f"Example models for {server.provider}:")
-        for example in examples:
-            logger.info(f"  - {example}")
-        if server.provider == "openai":
-            logger.info("  Note: Include context length with | separator")
+        examples = ToolDescriptions.MODEL_EXAMPLES.get(server.provider, [])
+        if examples:
+            logger.info(f"Example models for {server.provider}:")
+            for example in examples:
+                logger.info(f"  - {example}")
+            if server.provider == "openai":
+                logger.info("  Note: Include context length with | separator")
 
     # Run test mode if requested
     if test_mode:

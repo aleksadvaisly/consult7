@@ -23,7 +23,7 @@ from ..constants import (
 from ..token_utils import (
     TOKEN_SAFETY_FACTOR,
     estimate_tokens,
-    parse_model_thinking,
+    parse_model_spec,
     get_thinking_budget,
 )
 
@@ -79,9 +79,11 @@ class GoogleProvider(BaseProvider):
         if not api_key:
             return "", "No API key provided. Use --api-key flag", None
 
-        # Parse model and thinking override
-        actual_model, custom_thinking = parse_model_thinking(model_name)
-        thinking_mode = custom_thinking is not None or model_name.endswith("|thinking")
+        # Parse model specification (new approach)
+        actual_model, model_params = parse_model_spec(model_name)
+        thinking_mode = model_params.get('thinking', False)
+        custom_thinking = model_params.get('budget', None)  # None = let Google decide
+        temperature = model_params.get('temperature', DEFAULT_TEMPERATURE)
 
         # Get model context info
         try:
@@ -105,13 +107,17 @@ class GoogleProvider(BaseProvider):
         thinking_budget_actual = 0
         unknown_model_msg = ""
         if thinking_mode:
-            thinking_budget_actual = get_thinking_budget(actual_model, custom_thinking)
-
-            # If unknown model without override, disable thinking and add note
-            if thinking_budget_actual is None:
-                thinking_mode = False
-                thinking_budget_actual = 0
-                unknown_model_msg = f"\nNote: Unknown model '{actual_model}' requires thinking=X parameter for thinking mode. Example: {actual_model}|thinking=30000"
+            if custom_thinking is not None:
+                # Use user-specified budget
+                thinking_budget_actual = custom_thinking
+            else:
+                # Use model's default budget or dynamic thinking
+                default_budget = get_thinking_budget(actual_model, None)
+                if default_budget is not None:
+                    thinking_budget_actual = default_budget
+                else:
+                    # Unknown model, use dynamic thinking (-1)
+                    thinking_budget_actual = -1
 
         # Calculate available input space with thinking reserved upfront
         available_for_input = int(
@@ -167,10 +173,10 @@ class GoogleProvider(BaseProvider):
         try:
             client = genai.Client(api_key=api_key)
 
-            # Build config
+            # Build config with custom temperature
             config_params = {
                 "max_output_tokens": max_output_tokens,
-                "temperature": DEFAULT_TEMPERATURE,
+                "temperature": temperature,
             }
 
             # Add thinking config if |thinking suffix was used
